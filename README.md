@@ -1,2 +1,2 @@
-# node-emodel
-Easy MySQL for Node.js
+# node-ebase
+Easy MySQL model for Node.js
