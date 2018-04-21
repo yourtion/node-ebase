@@ -8,9 +8,17 @@
 import { Delete, Insert, MysqlInsert, QueryBuilder, Select, Update } from "squel";
 import * as Squel from "squel";
 
+export const squel = Squel.useFlavour("mysql");
+
 export { Delete, Insert, MysqlInsert, Select, Update };
 
 const SELETE_OPT = { autoQuoteTableNames: true, autoQuoteFieldNames: true };
+
+export interface IKVObject<T = any> {
+  [key: string]: T;
+}
+export type IConditions = IKVObject<string | string[]>;
+export type IPrimary = string | number;
 
 export interface IPageParams {
   limit?: number;
@@ -24,17 +32,8 @@ export interface IPageResult<T> {
   list: T[];
 }
 
-export interface IKVObject {
-  [key: string]: any;
-}
-
-export const squel = Squel.useFlavour("mysql");
-
 /**
  * 删除对象中的 undefined
- *
- * @param {Object} object
- * @returns {Object}
  */
 function removeUndefined(object: IKVObject) {
   Object.keys(object).forEach((key) => object[key] === undefined && delete object[key]);
@@ -46,29 +45,32 @@ function removeUndefined(object: IKVObject) {
 
 /**
  * 解析 Where
- *
- * @param {Object} sql Squel 对象
- * @param {Object} conditions 查询条件
+ * - key-value 直接使用 =
+ * - 以 $ 开头直接解析（数组直接析构）
+ * - 以 # 开头解析为 like %*%
+ * - 数组类型使用 in 方式
  */
-function _parseWhere(sql: Select, conditions: IKVObject) {
+function parseWhere(sql: Select, conditions: IConditions) {
   Object.keys(conditions).forEach((k) => {
+    const condition = conditions[k];
     if (k.indexOf("$") === 0) {
       // 以 $ 开头直接解析
-      if (Array.isArray(conditions[k])) {
-        sql.where(conditions[k][0], ...conditions[k].slice(1));
+      if (Array.isArray(condition)) {
+        sql.where(condition[0], ...condition.slice(1));
       } else {
-        sql.where(conditions[k]);
+        sql.where(condition);
       }
     } else if (k.indexOf("#") !== -1) {
-      sql.where(`${k.replace("#", "")} like ?`, "%" + conditions[k] + "%");
+      // 以 # 开头解析为 like
+      sql.where(`${k.replace("#", "")} like ?`, "%" + condition + "%");
     } else if (k.indexOf("$") !== -1) {
-      sql.where(k.replace("$", ""), conditions[k]);
-    } else if (Array.isArray(conditions[k])) {
+      sql.where(k.replace("$", ""), condition);
+    } else if (Array.isArray(condition)) {
       // 数组类型使用 in 方式
-      sql.where(`${k} in ?`, conditions[k]);
+      sql.where(`${k} in ?`, condition);
     } else {
       // 使用查询条件解析
-      sql.where(`${k} = ?`, conditions[k]);
+      sql.where(`${k} = ?`, condition);
     }
   });
 }
@@ -93,43 +95,40 @@ function errorHandler(err: any) {
 }
 
 export interface IBaseOptions {
+  /** 表前缀 */
   prefix?: string;
+  /** 主键名（默认为 id ） */
   primaryKey?: string;
+  /** 默认 query 的列 */
   fields?: string[];
+  /** 默认排序字段 */
   order?: string;
+  /** 默认asc */
+  asc?: boolean;
 }
 
-export default class Base<T> {
+export default abstract class EBase<T> {
+
   public table: string;
   public primaryKey: string;
   public fields: string[];
-  public order?: string;
-  public _parseWhere = _parseWhere;
+  public parseWhere = parseWhere;
   public connect: any;
+  private order?: string;
+  private asc: boolean;
 
-  /**
-   * Creates an instance of Base.
-   * @param {String} table 表名
-   * @param {Object} [options={}]
-   *   - {Object} fields 默认列
-   *   - {Object} order 默认排序字段
-   * @memberof Base
-   */
-  constructor(table: string, connect, options: IBaseOptions = {}) {
+  constructor(table: string, connect: any, options: IBaseOptions = {}) {
     const tablePrefix = options.prefix !== undefined ? options.prefix : "";
-    this.table = tablePrefix ? tablePrefix + table : table;
+    this.table = tablePrefix + table;
     this.primaryKey = options.primaryKey || "id";
     this.fields = options.fields || [];
     this.order = options.order;
+    this.asc = options.asc || true;
     this.connect = connect;
   }
 
   /**
    * 输出 SQL Debug
-   *
-   * @param {String} name Debug 前缀
-   * @returns {String} SQL
-   * @memberof Base
    */
   public debugSQL(name: string) {
     return (sql: any) => {
@@ -140,120 +139,79 @@ export default class Base<T> {
 
   /**
    * 查询方法（内部查询尽可能调用这个，会打印Log）
-   *
-   * @param {String} sql SQL字符串
-   * @param {Object} [connection=mysql] Mysql连接，默认为pool
-   * @returns {Promise}
-   * @memberof Base
    */
   public query(sql: QueryBuilder | string, connection = this.connect) {
     if (typeof sql === "string") {
       // mysqlLogger.debug(sql);
-      return connection.queryAsync(sql).catch((err) => errorHandler(err));
+      return connection.queryAsync(sql).catch((err: Error) => errorHandler(err));
     }
     const { text, values } = sql.toParam();
     // mysqlLogger.debug(text, values);
     // mysqlLogger.trace(sql.toString());
-    return connection.queryAsync(text, values).catch((err) => errorHandler(err));
+    return connection.queryAsync(text, values).catch((err: Error) => errorHandler(err));
   }
 
-  public _count(conditions: IKVObject = {}) {
-    const sql = squel
-      .select()
-      .from(this.table)
-      .field("COUNT(*)", "c");
-    _parseWhere(sql, conditions);
+  public _count(conditions: IConditions = {}) {
+    const sql = squel.select().from(this.table).field("COUNT(*)", "c");
+    parseWhere(sql, conditions);
     return sql;
   }
 
   /**
    * 计算数据表 count
-   *
-   * @param {Object} [conditions={}] 条件
-   * @returns {Promise}
-   * @memberof Base
    */
-  public count(conditions: IKVObject = {}): Promise<number> {
-    return this.query(this._count(conditions)).then((res) => res && res[0] && res[0].c);
+  public count(conditions: IConditions = {}): Promise<number> {
+    return this.query(this._count(conditions)).then((res: any) => res && res[0] && res[0].c);
   }
 
-  public _getByPrimary(primary: string | number, fields: string[]) {
+  public _getByPrimary(primary: IPrimary, fields: string[]) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
       // throw errors.dataBaseError("`primary` 不能为空");
     }
-    const sql = squel
-      .select(SELETE_OPT)
-      .from(this.table)
-      .where(this.primaryKey + " = ?", primary)
-      .limit(1);
+    const sql = squel.select(SELETE_OPT).from(this.table).where(this.primaryKey + " = ?", primary).limit(1);
     fields.forEach((f) => sql.field(f));
     return sql;
   }
 
   /**
-   * 根据 ID 获取数据
-   *
-   * @param {Number} primary 主键
-   * @param {Array} [fields=this.fields] 所需要的列数组
-   * @returns {Promise}
-   * @memberof Base
+   * 根据主键获取数据
    */
   public getByPrimary(primary: string, fields = this.fields): Promise<T> {
-    return this.query(this._getByPrimary(primary, fields)).then((res) => res && res[0]);
+    return this.query(this._getByPrimary(primary, fields)).then((res: T[]) => res && res[0]);
   }
 
   public _getOneByField(object: IKVObject = {}, fields = this.fields) {
-    const sql = squel
-      .select(SELETE_OPT)
-      .from(this.table)
-      .limit(1);
+    const sql = squel.select(SELETE_OPT).from(this.table).limit(1);
     fields.forEach((f) => sql.field(f));
-    _parseWhere(sql, object);
+    parseWhere(sql, object);
     return sql;
   }
 
   /**
    * 根据查询条件获取一条记录
-   *
-   * @param {Object} [object={}] 字段、值对象
-   * @param {Array} [fields=this.fields] 所需要的列数组
-   * @returns {Promise}
-   * @memberof Base
    */
   public getOneByField(object: IKVObject = {}, fields = this.fields): Promise<T> {
-    return this.query(this._getOneByField(object, fields)).then((res) => res && res[0]);
+    return this.query(this._getOneByField(object, fields)).then((res: T[]) => res && res[0]);
   }
 
-  public _deleteByPrimary(primary: string | number, limit = 1) {
+  public _deleteByPrimary(primary: IPrimary, limit = 1) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
       // throw errors.dataBaseError("`primary` 不能为空");
     }
-    return squel
-      .delete()
-      .from(this.table)
-      .where(this.primaryKey + " = ?", primary)
-      .limit(limit);
+    return squel.delete().from(this.table).where(this.primaryKey + " = ?", primary).limit(limit);
   }
 
   /**
    * 根据主键删除数据
-   *
-   * @param {Number} primary 主键
-   * @param {Number} [limit=1] 删除条数
-   * @returns {Promise}
-   * @memberof Base
    */
-  public deleteByPrimary(primary: string | number, limit = 1): Promise<number> {
-    return this.query(this._deleteByPrimary(primary, limit)).then((res) => res && res.affectedRows);
+  public deleteByPrimary(primary: IPrimary, limit = 1): Promise<number> {
+    return this.query(this._deleteByPrimary(primary, limit)).then((res: any) => res && res.affectedRows);
   }
 
-  public _deleteByField(conditions: IKVObject, limit = 1) {
-    const sql = squel
-      .delete()
-      .from(this.table)
-      .limit(limit);
+  public _deleteByField(conditions: IConditions, limit = 1) {
+    const sql = squel.delete().from(this.table).limit(limit);
     Object.keys(conditions).forEach((k) =>
       sql.where(k + (Array.isArray(conditions[k]) ? " in" : " =") + " ? ", conditions[k]),
     );
@@ -268,8 +226,8 @@ export default class Base<T> {
    * @returns {Promise}
    * @memberof Base
    */
-  public deleteByField(conditions: IKVObject, limit = 1): Promise<number> {
-    return this.query(this._deleteByField(conditions, limit)).then((res) => res && res.affectedRows);
+  public deleteByField(conditions: IConditions, limit = 1): Promise<number> {
+    return this.query(this._deleteByField(conditions, limit)).then((res: any) => res && res.affectedRows);
   }
 
   /**
@@ -280,24 +238,17 @@ export default class Base<T> {
    * @returns {Promise}
    * @memberof Base
    */
-  public getByField(conditions: IKVObject = {}, fields = this.fields): Promise<T[]> {
+  public getByField(conditions: IConditions = {}, fields = this.fields): Promise<T[]> {
     return this.list(conditions, fields, 999);
   }
 
   public _insert(object: IKVObject = {}) {
     removeUndefined(object);
-    return squel
-      .insert()
-      .into(this.table)
-      .setFields(object);
+    return squel.insert().into(this.table).setFields(object);
   }
 
   /**
    * 插入一条数据
-   *
-   * @param {Object} [object={}] 插入的数据对象
-   * @returns {Promise}
-   * @memberof Base
    */
   public insert(object: IKVObject = {}) {
     return this.query(this._insert(object));
@@ -305,69 +256,52 @@ export default class Base<T> {
 
   public _batchInsert(array: IKVObject[]) {
     array.forEach((o) => removeUndefined(o));
-    return squel
-      .insert()
-      .into(this.table)
-      .setFieldsRows(array);
+    return squel.insert().into(this.table).setFieldsRows(array);
   }
 
   /**
    * 批量插入数据
-   *
-   * @param {Array<Object>} array 插入的数据对象数组
-   * @returns {Promise}
-   * @memberof Base
    */
   public batchInsert(array: IKVObject[]) {
     return this.query(this._batchInsert(array));
   }
 
-  public _updateByPrimary(primary: string | number, objects: IKVObject, raw = false) {
+  public _updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
       // throw errors.dataBaseError("`primary` 不能为空");
     }
     removeUndefined(objects);
-    const sql = squel
-      .update()
-      .table(this.table)
-      .where(this.primaryKey + " = ?", primary);
-    if (raw) {
-      Object.keys(objects).forEach((k) => {
-        if (k.indexOf("$") === 0) {
-          sql.set(objects[k]);
-        } else {
-          sql.set(`${k} = ?`, objects[k]);
-        }
-      });
-    } else {
-      sql.setFields(objects);
+    const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
+    if (!raw) {
+      return sql.setFields(objects);
     }
+    Object.keys(objects).forEach((k) => {
+      if (k.indexOf("$") === 0) {
+        sql.set(objects[k]);
+      } else {
+        sql.set(`${k} = ?`, objects[k]);
+      }
+    });
     return sql;
   }
 
   /**
    * 根据主键更新记录
-   *
-   * @param {Number} primary 主键
-   * @param {Object} objects 更新的内容对象
-   * @param {Boolean} raw 是否解析 field 对象
-   * @returns {Promise}
-   * @memberof Base
    */
-  public updateByPrimary(primary: string | number, objects: IKVObject, raw = false): Promise<number> {
-    return this.query(this._updateByPrimary(primary, objects, raw)).then((res) => res && res.affectedRows);
+  public updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false): Promise<number> {
+    return this.query(this._updateByPrimary(primary, objects, raw)).then((res: any) => res && res.affectedRows);
   }
 
-  public _createOrUpdate(objects: IKVObject, update: string[]) {
+  public _createOrUpdate(objects: IKVObject, update = Object.keys(objects)) {
     removeUndefined(objects);
     const sql = squel.insert().into(this.table);
     sql.setFields(objects);
     update.forEach((k) => {
-      if (objects[k] !== undefined) {
-        sql.onDupUpdate(k, objects[k]);
-      } else if (Array.isArray(objects[k])) {
+      if (Array.isArray(objects[k])) {
         sql.onDupUpdate(objects[k][0], objects[k][1]);
+      } else if (objects[k] !== undefined) {
+        sql.onDupUpdate(k, objects[k]);
       }
     });
     return sql;
@@ -375,91 +309,68 @@ export default class Base<T> {
 
   /**
    * 创建一条记录，如果存在就更新
-   *
-   * @param {Object} objects 创建记录对象
-   * @param {Array} update 更新字段
-   * @returns {Promise}
-   * @memberof Base
    */
-  public createOrUpdate(objects: IKVObject, update: string[]) {
+  public createOrUpdate(objects: IKVObject, update = Object.keys(objects)) {
     return this.query(this._createOrUpdate(objects, update));
   }
 
-  public _updateByField(conditions: IKVObject, objects: IKVObject, raw = false) {
+  public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
     if (!conditions || Object.keys(conditions).length < 1) {
       throw new Error("`key` 不能为空");
       // throw errors.dataBaseError("`key` 不能为空");
     }
     removeUndefined(objects);
     const sql = squel.update().table(this.table);
-    if (raw) {
-      Object.keys(objects).forEach((k) => {
-        if (k.indexOf("$") === 0) {
-          sql.set(objects[k]);
-        } else {
-          sql.set(`${k} = ?`, objects[k]);
-        }
-      });
-    } else {
-      sql.setFields(objects);
-    }
     Object.keys(conditions).forEach((k) => sql.where(`${k} = ?`, conditions[k]));
+    if (!raw) {
+      return sql.setFields(objects);
+    }
+    Object.keys(objects).forEach((k) => {
+      if (k.indexOf("$") === 0) {
+        sql.set(objects[k]);
+      } else {
+        sql.set(`${k} = ?`, objects[k]);
+      }
+    });
     return sql;
   }
 
   /**
    * 根据查询条件更新记录
-   *
-   * @param {Object} key 查询条件对象
-   * @param {Object} fields 更新的内容对象
-   * @returns {Promise}
-   * @memberof Base
    */
-  public updateByField(conditions: IKVObject, objects: IKVObject, raw = false): Promise<number> {
-    return this.query(this._updateByField(conditions, objects)).then((res) => res && res.affectedRows);
+  public updateByField(conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+    return this.query(this._updateByField(conditions, objects)).then((res: any) => res && res.affectedRows);
   }
 
-  public _incrFields(primary: string | number, fields: string[], num = 1) {
+  public _incrFields(primary: IPrimary, fields: string[], num = 1) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
       // throw errors.dataBaseError("`primary` 不能为空");
     }
-    const sql = squel
-      .update()
-      .table(this.table)
-      .where(this.primaryKey + " = ?", primary);
+    const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
     fields.forEach((f) => sql.set(`${f} = ${f} + ${num}`));
     return sql;
   }
 
   /**
    * 根据主键对数据列执行加一操作
-   *
-   * @param {Number} primary 主键
-   * @param {Array} fields 需要更新的列数组
-   * @returns {Promise}
-   * @memberof Base
    */
-  public incrFields(primary: string | number, fields: string[], num = 1): Promise<number> {
-    return this.query(this._incrFields(primary, fields, num)).then((res) => res && res.affectedRows);
+  public incrFields(primary: IPrimary, fields: string[], num = 1): Promise<number> {
+    return this.query(this._incrFields(primary, fields, num)).then((res: any) => res && res.affectedRows);
   }
 
   public _list(
-    conditions: IKVObject = {},
+    conditions: IConditions = {},
     fields = this.fields,
     limit = 999,
     offset = 0,
     order = this.order,
-    asc = true,
+    asc = this.asc,
   ) {
     removeUndefined(conditions);
-    const sql = squel
-      .select(SELETE_OPT)
-      .from(this.table)
-      .offset(offset)
-      .limit(limit);
+    const sql = squel.select(SELETE_OPT).from(this.table).offset(offset).limit(limit);
     fields.forEach((f) => sql.field(f));
-    _parseWhere(sql, conditions);
+    parseWhere(sql, conditions);
     if (order) {
       sql.order(order, asc);
     }
@@ -468,28 +379,13 @@ export default class Base<T> {
 
   /**
    * 根据条件获取列表
-   *
-   * @param {Object} [conditions={}] 查询条件对象
-   * @param {Array} [fields=this.fields] 需要查询的字段
-   * @param {IPageParams} pages 分页对象
-   * @returns {Promise}
-   * @memberof Base
    */
-  public list(conditions: IKVObject, fields?: string[], pages?: IPageParams): Promise<T[]>;
+  public list(conditions: IConditions, fields?: string[], pages?: IPageParams): Promise<T[]>;
   /**
    * 根据条件获取列表
-   *
-   * @param {Object} [conditions={}] 查询条件对象
-   * @param {Array} [fields=this.fields] 需要查询的字段
-   * @param {Number} [limit=999] 限制条数(999)
-   * @param {Number} [offset=0] 跳过数量(0)
-   * @param {String} [order=this.order] 排序字段(this.order
-   * @param {Boolean} [asc=true] 是否正向排序(true)
-   * @returns {Promise}
-   * @memberof Base
    */
   public list(
-    conditions: IKVObject,
+    conditions: IConditions,
     fields?: string[],
     limit?: number,
     offset?: number,
@@ -516,11 +412,7 @@ export default class Base<T> {
       throw new Error("`keyword` | `search` 不能为空");
       // throw errors.dataBaseError("`keyword` | `search` 不能为空");
     }
-    const sql = squel
-      .select(SELETE_OPT)
-      .from(this.table)
-      .offset(offset)
-      .limit(limit);
+    const sql = squel.select(SELETE_OPT).from(this.table).offset(offset).limit(limit);
     fields.forEach((f) => sql.field(f));
     const exp = squel.expr();
     search.forEach((k) => {
@@ -535,37 +427,12 @@ export default class Base<T> {
 
   /**
    * 根据关键词进行搜索
-   *
-   * @param {String} keyword 关键词
-   * @param {Array} search 搜索字段
-   * @param {Array} [fields=this.fields] 需要查询的字段
-   * @param {IPageParams} pages 分页对象
-   * @returns {Promise}
-   * @memberof Base
    */
   public search(keyword: string, search: string[], fields?: string[], pages?: IPageParams): Promise<T[]>;
   /**
    * 根据关键词进行搜索
-   *
-   * @param {String} keyword 关键词
-   * @param {Array} search 搜索字段
-   * @param {Array} [fields=this.fields] 需要查询的字段
-   * @param {Number} [limit=999] 限制条数(999)
-   * @param {Number} [offset=0] 跳过数量(0)
-   * @param {String} [order=this.order] 排序字段(this.order
-   * @param {Boolean} [asc=true] 是否正向排序(true)
-   * @returns {Promise}
-   * @memberof Base
    */
-  public search(
-    keyword: string,
-    search: string[],
-    fields?: string[],
-    limit?: number,
-    offset?: number,
-    order?: string,
-    asc?: boolean,
-  ): Promise<T[]>;
+  public search(keyword: string, search: string[], fields?: string[], limit?: number, offset?: number, order?: string, asc?: boolean): Promise<T[]>;
   public search(keyword: string, search: string[], fields = this.fields, ...args: any[]): Promise<T[]> {
     if (args.length === 1 && typeof args[0] === "object") {
       return this.query(
@@ -576,35 +443,13 @@ export default class Base<T> {
   }
 
   /**
-   * 根据条件获取分页内容（比列表多处总数计算）
-   *
-   * @param {Object} [conditions={}] 查询条件对象
-   * @param {Array} [fields=this.fields] 需要查询的字段
-   * @param {Number} [limit=999] 限制条数(999)
-   * @param {Number} [offset=0] 跳过数量(0)
-   * @param {String} [order=this.order] 排序字段(this.order
-   * @param {Boolean} [asc=true] 是否正向排序(true)
-   * @returns {Promise}
-   * @memberof Base
+   * 根据条件获取分页内容（比列表多出总数计算）
    */
-  public page(
-    conditions: IKVObject,
-    fields?: string[],
-    limit?: number,
-    offset?: number,
-    order?: string,
-    asc?: boolean,
-  ): Promise<IPageResult<T>>;
+  public page(conditions: IConditions, fields?: string[], limit?: number, offset?: number, order?: string, asc?: boolean): Promise<IPageResult<T>>;
   /**
-   * 根据条件获取分页内容（比列表多处总数计算）
-   *
-   * @param {Object} [conditions={}] 查询条件对象
-   * @param {Array} [fields=this.fields] 需要查询的字段
-   * @param {IPageParams} pages 分页对象
-   * @returns {Promise}
-   * @memberof Base
+   * 根据条件获取分页内容（比列表多出总数计算）
    */
-  public page(conditions: IKVObject, fields?: string[], pages?: IPageParams): Promise<IPageResult<T>>;
+  public page(conditions: IConditions, fields?: string[], pages?: IPageParams): Promise<IPageResult<T>>;
   public page(conditions = {}, fields = this.fields, ...args: any[]): Promise<IPageResult<T>> {
     const listSql = this.list(conditions, fields, ...args);
     const countSql = this.count(conditions);
@@ -613,12 +458,8 @@ export default class Base<T> {
 
   /**
    * 执行事务（通过传人方法）
-   *
-   * @param {String} name
-   * @param {Function} func
-   * @memberof Base
    */
-  public transactions(name, func) {
+  public transactions(name: string, func: (conn: any) => any) {
     return async () => {
       if (!name) {
         throw new Error("`name` 不能为空");
@@ -628,7 +469,7 @@ export default class Base<T> {
       const tid = "";
       const debug = this.debugSQL(`Transactions[${tid}] - ${name}`);
       const connection = await this.connect.getConnectionAsync();
-      connection.debugQuery = (sql) => {
+      connection.debugQuery = (sql: any) => {
         debug(sql);
         return connection.queryAsync(sql);
       };
@@ -654,12 +495,8 @@ export default class Base<T> {
 
   /**
    * 执行事务（通过传人SQL语句数组）
-   *
-   * @param {Array<String>} sqls SQL语言数组
-   * @returns {Promise}
-   * @memberof Base
    */
-  public transactionSQLs(sqls) {
+  public transactionSQLs(sqls: string[]) {
     return async () => {
       if (!sqls || sqls.length < 1) {
         throw new Error("`sqls` 不能为空");

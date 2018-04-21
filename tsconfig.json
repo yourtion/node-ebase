@@ -5,13 +5,9 @@
     "module": "commonjs",
     "moduleResolution": "node",
     "declaration": true,
-    "allowJs": true,
     "sourceMap": true,
-    // "strict": true,
+    "strict": true,
     "target": "esnext",
-    "noFallthroughCasesInSwitch": true,
-    "allowUnreachableCode": false,
-    "allowUnusedLabels": false,
     "esModuleInterop": true
   },
   "include": [
