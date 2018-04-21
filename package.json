@@ -1,6 +1,6 @@
 {
   "name": "ebase",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Easy MySQL model for Node.js",
   "main": "dist/index.js",
   "typings": "dist/index.d.ts",
@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "lint": "tslint -p . --fix",
+    "prepublishOnly": "npm run lint && tsc",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
