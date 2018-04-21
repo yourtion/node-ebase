@@ -3,12 +3,13 @@
   "version": "0.1.0",
   "description": "Easy MySQL model for Node.js",
   "main": "dist/index.js",
-  "typing": "dist/index.d.ts",
+  "typings": "dist/index.d.ts",
   "files": [
     "dist/index.d.ts",
     "dist/index.js"
   ],
   "scripts": {
+    "lint": "tslint -p . --fix",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
@@ -24,5 +25,8 @@
   "bugs": {
     "url": "https://github.com/yourtion/node-ebase/issues"
   },
-  "homepage": "https://github.com/yourtion/node-ebase#readme"
+  "homepage": "https://github.com/yourtion/node-ebase#readme",
+  "devDependencies": {
+    "squel": "^5.12.1"
+  }
 }
