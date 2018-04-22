@@ -1,8 +1,7 @@
-/* tslint:disable:no-conditional-assignment arrow-parens */
+/* tslint:disable:no-conditional-assignment arrow-parens no-console */
 
+import { QueryBuilder } from "squel";
 import EBase, { IKVObject } from "./index";
-
-class Base<T> extends EBase<T> {}
 
 function getAllMethodNames(obj: any) {
   const methods: Set<string> = new Set();
@@ -28,6 +27,12 @@ const PARAMS_1: IKVObject<any> = {
   _list: [],
   _search: ["Yourtion", ["name"]],
 };
+
+class Base<T> extends EBase<T> {
+  errorHandler(err: any) { throw err; }
+  debugSQL(name: string)  { return (sql: any) => sql; }
+  query(sql: string | QueryBuilder, connection: any) { return connection.queryAsync(sql); }
+}
 
 describe("Snapshot", () => {
   const base = new Base<string>("test", {}) as IKVObject;

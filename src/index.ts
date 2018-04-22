@@ -1,5 +1,3 @@
-"use strict";
-
 /**
  * @file base model 基础模块
  * @author Yourtion Guo <yourtion@gmail.com>
@@ -75,25 +73,6 @@ function parseWhere(sql: Select, conditions: IConditions) {
   });
 }
 
-/**
- * 数据库错误处理
- *
- * @param {Error} err 错误
- */
-function errorHandler(err: any) {
-  // 如果是自定义错误直接抛出
-  if (err.code && !isNaN(err.code - 0)) {
-    throw err;
-  }
-  // 判断条件
-  switch (err.code) {
-    case "ER_DUP_ENTRY":
-      throw Error("ER_DUP_ENTRY");
-    default:
-      throw err;
-  }
-}
-
 export interface IBaseOptions {
   /** 表前缀 */
   prefix?: string;
@@ -130,26 +109,14 @@ export default abstract class EBase<T> {
   /**
    * 输出 SQL Debug
    */
-  public debugSQL(name: string) {
-    return (sql: any) => {
-      // mysqlLogger.debug(` ${name} : ${sql}`);
-      return sql;
-    };
-  }
+  abstract debugSQL<U = string>(name: string): (sql: U) => U;
 
   /**
    * 查询方法（内部查询尽可能调用这个，会打印Log）
    */
-  public query(sql: QueryBuilder | string, connection = this.connect) {
-    if (typeof sql === "string") {
-      // mysqlLogger.debug(sql);
-      return connection.queryAsync(sql).catch((err: Error) => errorHandler(err));
-    }
-    const { text, values } = sql.toParam();
-    // mysqlLogger.debug(text, values);
-    // mysqlLogger.trace(sql.toString());
-    return connection.queryAsync(text, values).catch((err: Error) => errorHandler(err));
-  }
+  abstract query(sql: QueryBuilder | string, connection?: any): any;
+
+  abstract errorHandler(err: any): void;
 
   public _count(conditions: IConditions = {}) {
     const sql = squel.select().from(this.table).field("COUNT(*)", "c");
@@ -486,7 +453,7 @@ export default abstract class EBase<T> {
         // console.log(err);
         await connection.rollbackAsync();
         // debug('Transaction Rollback', err.code < 0);
-        errorHandler(err);
+        this.errorHandler(err);
       } finally {
         connection.release();
       }
@@ -516,7 +483,7 @@ export default abstract class EBase<T> {
       } catch (err) {
         await connection.rollbackAsync();
         // logger.debug('Rollback Transaction');
-        errorHandler(err);
+        this.errorHandler(err);
       } finally {
         await connection.release();
       }
