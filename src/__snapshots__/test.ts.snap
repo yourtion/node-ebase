@@ -1,0 +1,27 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`Snapshot _batchInsert 1`] = `"INSERT INTO test (a, a2) VALUES ('b', 'b2')"`;
+
+exports[`Snapshot _count 1`] = `"SELECT COUNT(*) AS \\"c\\" FROM test"`;
+
+exports[`Snapshot _createOrUpdate 1`] = `"INSERT INTO test (c) VALUES ('1') ON DUPLICATE KEY UPDATE c = '1'"`;
+
+exports[`Snapshot _deleteByField 1`] = `"DELETE FROM test WHERE (a = 'b' ) LIMIT 1"`;
+
+exports[`Snapshot _deleteByPrimary 1`] = `"DELETE FROM test WHERE (id = '2') LIMIT 1"`;
+
+exports[`Snapshot _getByPrimary 1`] = `"SELECT \`a\`, \`c\` FROM \`test\` WHERE (id = '1') LIMIT 1"`;
+
+exports[`Snapshot _getOneByField 1`] = `"SELECT * FROM \`test\` LIMIT 1"`;
+
+exports[`Snapshot _incrFields 1`] = `"UPDATE test SET a = a + 2 WHERE (id = 1)"`;
+
+exports[`Snapshot _insert 1`] = `"INSERT INTO test (a) VALUES ('b')"`;
+
+exports[`Snapshot _list 1`] = `"SELECT * FROM \`test\` LIMIT 999 OFFSET 0"`;
+
+exports[`Snapshot _search 1`] = `"SELECT * FROM \`test\` WHERE (name like '%Yourtion%') LIMIT 10 OFFSET 0"`;
+
+exports[`Snapshot _updateByField 1`] = `"UPDATE test SET a = 'c' WHERE (a = 'b')"`;
+
+exports[`Snapshot _updateByPrimary 1`] = `"UPDATE test SET a = 'b2' WHERE (id = 1)"`;

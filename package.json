@@ -11,7 +11,7 @@
   "scripts": {
     "lint": "tslint -p . --fix",
     "prepublishOnly": "npm run lint && tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -31,6 +31,21 @@
     "squel": "^5.12.1"
   },
   "devDependencies": {
-    "jest": "^22.4.3"
+    "@types/jest": "^22.2.3",
+    "jest": "^22.4.3",
+    "ts-jest": "^22.4.3"
+  },
+  "jest": {
+    "transform": {
+      "^.+\\.tsx?$": "ts-jest"
+    },
+    "testRegex": "./src/test",
+    "collectCoverageFrom": [
+      "src/index.ts"
+    ],
+    "moduleFileExtensions": [
+      "ts",
+      "js"
+    ]
   }
 }
