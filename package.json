@@ -27,7 +27,10 @@
     "url": "https://github.com/yourtion/node-ebase/issues"
   },
   "homepage": "https://github.com/yourtion/node-ebase#readme",
-  "devDependencies": {
+  "dependencies": {
     "squel": "^5.12.1"
+  },
+  "devDependencies": {
+    "jest": "^22.4.3"
   }
 }
