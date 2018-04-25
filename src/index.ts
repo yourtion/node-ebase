@@ -92,9 +92,10 @@ export default abstract class EBase<T> {
   public primaryKey: string;
   public fields: string[];
   public parseWhere = parseWhere;
-  public connect: any;
+  protected connect: any;
   private order?: string;
   private asc: boolean;
+  private log: (info: any) => void;
 
   constructor(table: string, connect: any, options: IBaseOptions = {}) {
     const tablePrefix = options.prefix !== undefined ? options.prefix : "";
@@ -104,18 +105,22 @@ export default abstract class EBase<T> {
     this.order = options.order;
     this.asc = options.asc || true;
     this.connect = connect;
+    this.log = this.debugInfo<any>(table);
   }
 
   /**
    * 输出 SQL Debug
    */
-  abstract debugSQL<U = string>(name: string): (sql: U) => U;
+  abstract debugInfo<U = string>(name?: string): (info: U) => U;
 
   /**
    * 查询方法（内部查询尽可能调用这个，会打印Log）
    */
   abstract query(sql: QueryBuilder | string, connection?: any): any;
 
+  /**
+   * 错误处理方法
+   */
   abstract errorHandler(err: any): void;
 
   public _count(conditions: IConditions = {}) {
@@ -134,7 +139,6 @@ export default abstract class EBase<T> {
   public _getByPrimary(primary: IPrimary, fields: string[]) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
     }
     const sql = squel.select(SELETE_OPT).from(this.table).where(this.primaryKey + " = ?", primary).limit(1);
     fields.forEach((f) => sql.field(f));
@@ -165,7 +169,6 @@ export default abstract class EBase<T> {
   public _deleteByPrimary(primary: IPrimary, limit = 1) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
     }
     return squel.delete().from(this.table).where(this.primaryKey + " = ?", primary).limit(limit);
   }
@@ -236,7 +239,6 @@ export default abstract class EBase<T> {
   public _updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
     }
     removeUndefined(objects);
     const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
@@ -284,7 +286,6 @@ export default abstract class EBase<T> {
   public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
     if (!conditions || Object.keys(conditions).length < 1) {
       throw new Error("`key` 不能为空");
-      // throw errors.dataBaseError("`key` 不能为空");
     }
     removeUndefined(objects);
     const sql = squel.update().table(this.table);
@@ -312,7 +313,6 @@ export default abstract class EBase<T> {
   public _incrFields(primary: IPrimary, fields: string[], num = 1) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
     }
     const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
     fields.forEach((f) => sql.set(`${f} = ${f} + ${num}`));
@@ -377,7 +377,6 @@ export default abstract class EBase<T> {
   ) {
     if (!keyword || search.length < 1) {
       throw new Error("`keyword` | `search` 不能为空");
-      // throw errors.dataBaseError("`keyword` | `search` 不能为空");
     }
     const sql = squel.select(SELETE_OPT).from(this.table).offset(offset).limit(limit);
     fields.forEach((f) => sql.field(f));
@@ -424,17 +423,15 @@ export default abstract class EBase<T> {
   }
 
   /**
-   * 执行事务（通过传人方法）
+   * 执行事务（通过传入方法）
    */
   public transactions(name: string, func: (conn: any) => any) {
     return async () => {
       if (!name) {
         throw new Error("`name` 不能为空");
-        // throw errors.dataBaseError('`name` 不能为空');
       }
-      // utils.randomString(6);
-      const tid = "";
-      const debug = this.debugSQL(`Transactions[${tid}] - ${name}`);
+      const tid = Math.random().toString(36).substring(6);
+      const debug = this.debugInfo(`Transactions[${tid}] - ${name}`);
       const connection = await this.connect.getConnectionAsync();
       connection.debugQuery = (sql: any) => {
         debug(sql);
@@ -445,14 +442,13 @@ export default abstract class EBase<T> {
       try {
         const result = await func(connection);
         await connection.commitAsync(); // 提交事务
-        // debug('result: ', result);
-        // debug('Transaction Done');
+        debug(`result: ${result}`);
+        debug("Transaction Done");
         return result;
       } catch (err) {
         // 回滚错误
-        // console.log(err);
         await connection.rollbackAsync();
-        // debug('Transaction Rollback', err.code < 0);
+        debug(`Transaction Rollback ${err.code}`);
         this.errorHandler(err);
       } finally {
         connection.release();
@@ -467,22 +463,21 @@ export default abstract class EBase<T> {
     return async () => {
       if (!sqls || sqls.length < 1) {
         throw new Error("`sqls` 不能为空");
-        // throw errors.dataBaseError('`sqls` 不能为空');
       }
-      // logger.debug('Begin Transaction');
+      this.log("Begin Transaction");
       const connection = await this.connect.getConnectionAsync();
       await connection.beginTransactionAsync();
       try {
         for (const sql of sqls) {
-          // logger.debug(`Transaction SQL: ${ sql }`);
+          this.log(`Transaction SQL: ${ sql }`);
           await connection.queryAsync(sql);
         }
         const res = await connection.commitAsync();
-        // logger.debug('Done Transaction');
+        this.log("Done Transaction");
         return res;
       } catch (err) {
         await connection.rollbackAsync();
-        // logger.debug('Rollback Transaction');
+        this.log("Rollback Transaction");
         this.errorHandler(err);
       } finally {
         await connection.release();
