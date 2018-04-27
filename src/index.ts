@@ -92,9 +92,10 @@ export default abstract class EBase<T> {
   public primaryKey: string;
   public fields: string[];
   public parseWhere = parseWhere;
-  public connect: any;
+  protected connect: any;
   private order?: string;
   private asc: boolean;
+  private log: (info: any) => void;
 
   constructor(table: string, connect: any, options: IBaseOptions = {}) {
     const tablePrefix = options.prefix !== undefined ? options.prefix : "";
@@ -104,18 +105,22 @@ export default abstract class EBase<T> {
     this.order = options.order;
     this.asc = options.asc || true;
     this.connect = connect;
+    this.log = this.debugInfo<any>(table);
   }
 
   /**
    * 输出 SQL Debug
    */
-  abstract debugSQL<U = string>(name: string): (sql: U) => U;
+  abstract debugInfo<U = string>(name?: string): (info: U) => U;
 
   /**
    * 查询方法（内部查询尽可能调用这个，会打印Log）
    */
   abstract query(sql: QueryBuilder | string, connection?: any): any;
 
+  /**
+   * 错误处理方法
+   */
   abstract errorHandler(err: any): void;
 
   public _count(conditions: IConditions = {}) {
@@ -434,14 +439,14 @@ export default abstract class EBase<T> {
   }
 
   /**
-   * 执行事务（通过传人方法）
+   * 执行事务（通过传入方法）
    */
   public transactions(name: string, func: (conn: any) => any) {
     return async () => {
       if (!name) { throw new Error("`name` 不能为空"); }
       // utils.randomString(6);
       const tid = "";
-      const debug = this.debugSQL(`Transactions[${tid}] - ${name}`);
+      const debug = this.debugInfo(`Transactions[${tid}] - ${name}`);
       const connection = await this.connect.getConnectionAsync();
       connection.debugQuery = (sql: any) => {
         debug(sql);
@@ -452,14 +457,13 @@ export default abstract class EBase<T> {
       try {
         const result = await func(connection);
         await connection.commitAsync(); // 提交事务
-        // debug('result: ', result);
-        // debug('Transaction Done');
+        debug(`result: ${result}`);
+        debug("Transaction Done");
         return result;
       } catch (err) {
         // 回滚错误
-        // console.log(err);
         await connection.rollbackAsync();
-        // debug('Transaction Rollback', err.code < 0);
+        debug(`Transaction Rollback ${err.code}`);
         this.errorHandler(err);
       } finally {
         connection.release();
@@ -474,22 +478,21 @@ export default abstract class EBase<T> {
     return async () => {
       if (!sqls || sqls.length < 1) {
         throw new Error("`sqls` 不能为空");
-        // throw errors.dataBaseError('`sqls` 不能为空');
       }
-      // logger.debug('Begin Transaction');
+      this.log("Begin Transaction");
       const connection = await this.connect.getConnectionAsync();
       await connection.beginTransactionAsync();
       try {
         for (const sql of sqls) {
-          // logger.debug(`Transaction SQL: ${ sql }`);
+          this.log(`Transaction SQL: ${ sql }`);
           await connection.queryAsync(sql);
         }
         const res = await connection.commitAsync();
-        // logger.debug('Done Transaction');
+        this.log("Done Transaction");
         return res;
       } catch (err) {
         await connection.rollbackAsync();
-        // logger.debug('Rollback Transaction');
+        this.log("Rollback Transaction");
         this.errorHandler(err);
       } finally {
         await connection.release();

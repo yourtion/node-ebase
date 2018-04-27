@@ -29,7 +29,7 @@ const PARAMS_1: IKVObject<any> = {
 
 class Base<T> extends EBase<T> {
   errorHandler(err: any) { throw err; }
-  debugSQL(name: string)  { return (sql: any) => sql; }
+  debugInfo(name: string)  { return (sql: any) => sql; }
   query(sql: string | QueryBuilder, connection: any) { return connection.queryAsync(sql); }
 }
 
