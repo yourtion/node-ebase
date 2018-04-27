@@ -124,28 +124,35 @@ export default abstract class EBase<T> {
     return sql;
   }
 
+  public countRaw(connect: any, conditions: IConditions = {}): Promise<number> {
+    return this.query(this._count(conditions), connect).then((res: any) => res && res[0] && res[0].c);
+  }
+
   /**
    * 计算数据表 count
    */
-  public count(conditions: IConditions = {}): Promise<number> {
-    return this.query(this._count(conditions)).then((res: any) => res && res[0] && res[0].c);
+  public count(conditions: IConditions = {}) {
+    return this.countRaw(this.connect, conditions);
   }
 
   public _getByPrimary(primary: IPrimary, fields: string[]) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
     }
     const sql = squel.select(SELETE_OPT).from(this.table).where(this.primaryKey + " = ?", primary).limit(1);
     fields.forEach((f) => sql.field(f));
     return sql;
   }
 
+  public getByPrimaryRaw(connect: any, primary: string, fields = this.fields): Promise<T> {
+    return this.query(this._getByPrimary(primary, fields), connect).then((res: T[]) => res && res[0]);
+  }
+
   /**
    * 根据主键获取数据
    */
-  public getByPrimary(primary: string, fields = this.fields): Promise<T> {
-    return this.query(this._getByPrimary(primary, fields)).then((res: T[]) => res && res[0]);
+  public getByPrimary(primary: string, fields = this.fields) {
+    return this.getByPrimaryRaw(this.connect, primary, fields);
   }
 
   public _getOneByField(object: IKVObject = {}, fields = this.fields) {
@@ -155,26 +162,33 @@ export default abstract class EBase<T> {
     return sql;
   }
 
+  public getOneByFieldRaw(connect: any, object: IKVObject = {}, fields = this.fields): Promise<T> {
+    return this.query(this._getOneByField(object, fields), connect).then((res: T[]) => res && res[0]);
+  }
+
   /**
    * 根据查询条件获取一条记录
    */
-  public getOneByField(object: IKVObject = {}, fields = this.fields): Promise<T> {
-    return this.query(this._getOneByField(object, fields)).then((res: T[]) => res && res[0]);
+  public getOneByField(object: IKVObject = {}, fields = this.fields) {
+    return this.getOneByFieldRaw(this.connect, object, fields);
   }
 
   public _deleteByPrimary(primary: IPrimary, limit = 1) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
     }
     return squel.delete().from(this.table).where(this.primaryKey + " = ?", primary).limit(limit);
+  }
+
+  public deleteByPrimaryRaw(connect: any, primary: IPrimary, limit = 1): Promise<number> {
+    return this.query(this._deleteByPrimary(primary, limit), connect).then((res: any) => res && res.affectedRows);
   }
 
   /**
    * 根据主键删除数据
    */
-  public deleteByPrimary(primary: IPrimary, limit = 1): Promise<number> {
-    return this.query(this._deleteByPrimary(primary, limit)).then((res: any) => res && res.affectedRows);
+  public deleteByPrimary(primary: IPrimary, limit = 1) {
+    return this.deleteByPrimaryRaw(this.connect, primary, limit);
   }
 
   public _deleteByField(conditions: IConditions, limit = 1) {
@@ -185,6 +199,10 @@ export default abstract class EBase<T> {
     return sql;
   }
 
+  public deleteByFieldRaw(connect: any, conditions: IConditions, limit = 1): Promise<number> {
+    return this.query(this._deleteByField(conditions, limit), connect).then((res: any) => res && res.affectedRows);
+  }
+
   /**
    * 根据查询条件删除数据
    *
@@ -193,8 +211,8 @@ export default abstract class EBase<T> {
    * @returns {Promise}
    * @memberof Base
    */
-  public deleteByField(conditions: IConditions, limit = 1): Promise<number> {
-    return this.query(this._deleteByField(conditions, limit)).then((res: any) => res && res.affectedRows);
+  public deleteByField(conditions: IConditions, limit = 1) {
+    return this.deleteByFieldRaw(this.connect, conditions, limit);
   }
 
   /**
@@ -214,11 +232,15 @@ export default abstract class EBase<T> {
     return squel.insert().into(this.table).setFields(object);
   }
 
+  public insertRaw(connect: any, object: IKVObject = {}) {
+    return this.query(this._insert(object), connect);
+  }
+
   /**
    * 插入一条数据
    */
   public insert(object: IKVObject = {}) {
-    return this.query(this._insert(object));
+    return this.insertRaw(this.connect, object);
   }
 
   public _batchInsert(array: IKVObject[]) {
@@ -233,13 +255,12 @@ export default abstract class EBase<T> {
     return this.query(this._batchInsert(array));
   }
 
-  public _updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false) {
-    if (primary === undefined) {
-      throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
-    }
+  public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
+    if (!conditions || Object.keys(conditions).length < 1) { throw new Error("`key` 不能为空"); }
+
     removeUndefined(objects);
-    const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
+    const sql = squel.update().table(this.table);
+    Object.keys(conditions).forEach((k) => sql.where(`${k} = ?`, conditions[k]));
     if (!raw) {
       return sql.setFields(objects);
     }
@@ -253,11 +274,25 @@ export default abstract class EBase<T> {
     return sql;
   }
 
+  public updateByFieldRaw(connect: any, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+    return this.query(this._updateByField(conditions, objects), connect).then((res: any) => res && res.affectedRows);
+  }
+
+  /**
+   * 根据查询条件更新记录
+   */
+  public updateByField(conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+    return this.updateByFieldRaw(this.connect, conditions, objects).then((res: any) => res && res.affectedRows);
+  }
+
   /**
    * 根据主键更新记录
    */
   public updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false): Promise<number> {
-    return this.query(this._updateByPrimary(primary, objects, raw)).then((res: any) => res && res.affectedRows);
+    if (primary === undefined) { throw new Error("`primary` 不能为空"); }
+    const condition: IKVObject = {};
+    condition[this.primaryKey] = primary;
+    return this.updateByField(condition, objects, raw).then((res: any) => res && res.affectedRows);
   }
 
   public _createOrUpdate(objects: IKVObject, update = Object.keys(objects)) {
@@ -281,49 +316,23 @@ export default abstract class EBase<T> {
     return this.query(this._createOrUpdate(objects, update));
   }
 
-  public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
-    if (!conditions || Object.keys(conditions).length < 1) {
-      throw new Error("`key` 不能为空");
-      // throw errors.dataBaseError("`key` 不能为空");
-    }
-    removeUndefined(objects);
-    const sql = squel.update().table(this.table);
-    Object.keys(conditions).forEach((k) => sql.where(`${k} = ?`, conditions[k]));
-    if (!raw) {
-      return sql.setFields(objects);
-    }
-    Object.keys(objects).forEach((k) => {
-      if (k.indexOf("$") === 0) {
-        sql.set(objects[k]);
-      } else {
-        sql.set(`${k} = ?`, objects[k]);
-      }
-    });
-    return sql;
-  }
-
-  /**
-   * 根据查询条件更新记录
-   */
-  public updateByField(conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
-    return this.query(this._updateByField(conditions, objects)).then((res: any) => res && res.affectedRows);
-  }
-
   public _incrFields(primary: IPrimary, fields: string[], num = 1) {
-    if (primary === undefined) {
-      throw new Error("`primary` 不能为空");
-      // throw errors.dataBaseError("`primary` 不能为空");
-    }
+    if (primary === undefined) { throw new Error("`primary` 不能为空"); }
+
     const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
     fields.forEach((f) => sql.set(`${f} = ${f} + ${num}`));
     return sql;
   }
 
+  public incrFieldsRaw(connect: any, primary: IPrimary, fields: string[], num = 1): Promise<number> {
+    return this.query(this._incrFields(primary, fields, num), connect).then((res: any) => res && res.affectedRows);
+  }
+
   /**
    * 根据主键对数据列执行加一操作
    */
-  public incrFields(primary: IPrimary, fields: string[], num = 1): Promise<number> {
-    return this.query(this._incrFields(primary, fields, num)).then((res: any) => res && res.affectedRows);
+  public incrFields(primary: IPrimary, fields: string[], num = 1) {
+    return this.incrFieldsRaw(this.connect, primary, fields, num);
   }
 
   public _list(
@@ -344,6 +353,13 @@ export default abstract class EBase<T> {
     return sql;
   }
 
+  public listRaw(connect: any, conditions = {}, fields = this.fields, ...args: any[]): Promise<T[]> {
+    if (args.length === 2 && typeof args[1] === "object") {
+      return this.query(this._list(conditions, fields, args[0].limit, args[0].offset, args[0].order, args[0].asc), connect);
+    }
+    return this.query(this._list(conditions, fields, ...args), connect);
+  }
+
   /**
    * 根据条件获取列表
    */
@@ -359,11 +375,8 @@ export default abstract class EBase<T> {
     order?: string,
     asc?: boolean,
   ): Promise<T[]>;
-  public list(conditions = {}, fields = this.fields, ...args: any[]): Promise<T[]> {
-    if (args.length === 1 && typeof args[0] === "object") {
-      return this.query(this._list(conditions, fields, args[0].limit, args[0].offset, args[0].order, args[0].asc));
-    }
-    return this.query(this._list(conditions, fields, ...args));
+  public list(conditions = {}, fields = this.fields, ...args: any[]) {
+    return this.listRaw(this.connect, conditions, fields, ...args);
   }
 
   public _search(
@@ -375,10 +388,7 @@ export default abstract class EBase<T> {
     order = this.order,
     asc = true,
   ) {
-    if (!keyword || search.length < 1) {
-      throw new Error("`keyword` | `search` 不能为空");
-      // throw errors.dataBaseError("`keyword` | `search` 不能为空");
-    }
+    if (!keyword || search.length < 1) { throw new Error("`keyword` | `search` 不能为空"); }
     const sql = squel.select(SELETE_OPT).from(this.table).offset(offset).limit(limit);
     fields.forEach((f) => sql.field(f));
     const exp = squel.expr();
@@ -428,10 +438,7 @@ export default abstract class EBase<T> {
    */
   public transactions(name: string, func: (conn: any) => any) {
     return async () => {
-      if (!name) {
-        throw new Error("`name` 不能为空");
-        // throw errors.dataBaseError('`name` 不能为空');
-      }
+      if (!name) { throw new Error("`name` 不能为空"); }
       // utils.randomString(6);
       const tid = "";
       const debug = this.debugSQL(`Transactions[${tid}] - ${name}`);

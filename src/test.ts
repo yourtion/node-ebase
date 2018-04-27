@@ -20,7 +20,6 @@ const PARAMS_1: IKVObject<any> = {
   _deleteByField: [{ a: "b" }],
   _insert: [{ a: "b" }],
   _batchInsert: [[{ a: "b", a2: "b2" }]],
-  _updateByPrimary: [1, { a: "b2" }],
   _createOrUpdate: [{ c: "1" }],
   _updateByField: [{ a: "b" }, { a: "c" }],
   _incrFields: [1, ["a"], 2],
