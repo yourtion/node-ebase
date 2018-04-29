@@ -34,7 +34,7 @@ export interface IPageResult<T> {
  * 删除对象中的 undefined
  */
 function removeUndefined(object: IKVObject) {
-  Object.keys(object).forEach((key) => object[key] === undefined && delete object[key]);
+  Object.keys(object).forEach(key => object[key] === undefined && delete object[key]);
   if (Object.keys.length === 0) {
     throw Error("Object is empty");
   }
@@ -49,7 +49,7 @@ function removeUndefined(object: IKVObject) {
  * - 数组类型使用 in 方式
  */
 function parseWhere(sql: Select, conditions: IConditions) {
-  Object.keys(conditions).forEach((k) => {
+  Object.keys(conditions).forEach(k => {
     const condition = conditions[k];
     if (k.indexOf("$") === 0) {
       // 以 $ 开头直接解析
@@ -87,7 +87,6 @@ export interface IBaseOptions {
 }
 
 export default abstract class EBase<T> {
-
   public table: string;
   public primaryKey: string;
   public fields: string[];
@@ -124,7 +123,10 @@ export default abstract class EBase<T> {
   abstract errorHandler(err: any): void;
 
   public _count(conditions: IConditions = {}) {
-    const sql = squel.select().from(this.table).field("COUNT(*)", "c");
+    const sql = squel
+      .select()
+      .from(this.table)
+      .field("COUNT(*)", "c");
     parseWhere(sql, conditions);
     return sql;
   }
@@ -144,8 +146,12 @@ export default abstract class EBase<T> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    const sql = squel.select(SELETE_OPT).from(this.table).where(this.primaryKey + " = ?", primary).limit(1);
-    fields.forEach((f) => sql.field(f));
+    const sql = squel
+      .select(SELETE_OPT)
+      .from(this.table)
+      .where(this.primaryKey + " = ?", primary)
+      .limit(1);
+    fields.forEach(f => sql.field(f));
     return sql;
   }
 
@@ -161,8 +167,11 @@ export default abstract class EBase<T> {
   }
 
   public _getOneByField(object: IKVObject = {}, fields = this.fields) {
-    const sql = squel.select(SELETE_OPT).from(this.table).limit(1);
-    fields.forEach((f) => sql.field(f));
+    const sql = squel
+      .select(SELETE_OPT)
+      .from(this.table)
+      .limit(1);
+    fields.forEach(f => sql.field(f));
     parseWhere(sql, object);
     return sql;
   }
@@ -182,7 +191,11 @@ export default abstract class EBase<T> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    return squel.delete().from(this.table).where(this.primaryKey + " = ?", primary).limit(limit);
+    return squel
+      .delete()
+      .from(this.table)
+      .where(this.primaryKey + " = ?", primary)
+      .limit(limit);
   }
 
   public deleteByPrimaryRaw(connect: any, primary: IPrimary, limit = 1): Promise<number> {
@@ -197,8 +210,11 @@ export default abstract class EBase<T> {
   }
 
   public _deleteByField(conditions: IConditions, limit = 1) {
-    const sql = squel.delete().from(this.table).limit(limit);
-    Object.keys(conditions).forEach((k) =>
+    const sql = squel
+      .delete()
+      .from(this.table)
+      .limit(limit);
+    Object.keys(conditions).forEach(k =>
       sql.where(k + (Array.isArray(conditions[k]) ? " in" : " =") + " ? ", conditions[k]),
     );
     return sql;
@@ -210,11 +226,6 @@ export default abstract class EBase<T> {
 
   /**
    * 根据查询条件删除数据
-   *
-   * @param {Object} [object={}] 字段、值对象
-   * @param {Number} [limit=1] 删除条数
-   * @returns {Promise}
-   * @memberof Base
    */
   public deleteByField(conditions: IConditions, limit = 1) {
     return this.deleteByFieldRaw(this.connect, conditions, limit);
@@ -222,11 +233,6 @@ export default abstract class EBase<T> {
 
   /**
    * 根据查询条件获取记录
-   *
-   * @param {Object} [object={}] 字段、值对象
-   * @param {Array} [fields=this.fields] 所需要的列数组
-   * @returns {Promise}
-   * @memberof Base
    */
   public getByField(conditions: IConditions = {}, fields = this.fields): Promise<T[]> {
     return this.list(conditions, fields, 999);
@@ -234,7 +240,10 @@ export default abstract class EBase<T> {
 
   public _insert(object: IKVObject = {}) {
     removeUndefined(object);
-    return squel.insert().into(this.table).setFields(object);
+    return squel
+      .insert()
+      .into(this.table)
+      .setFields(object);
   }
 
   public insertRaw(connect: any, object: IKVObject = {}) {
@@ -249,8 +258,11 @@ export default abstract class EBase<T> {
   }
 
   public _batchInsert(array: IKVObject[]) {
-    array.forEach((o) => removeUndefined(o));
-    return squel.insert().into(this.table).setFieldsRows(array);
+    array.forEach(o => removeUndefined(o));
+    return squel
+      .insert()
+      .into(this.table)
+      .setFieldsRows(array);
   }
 
   /**
@@ -261,15 +273,17 @@ export default abstract class EBase<T> {
   }
 
   public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
-    if (!conditions || Object.keys(conditions).length < 1) { throw new Error("`key` 不能为空"); }
+    if (!conditions || Object.keys(conditions).length < 1) {
+      throw new Error("`key` 不能为空");
+    }
 
     removeUndefined(objects);
     const sql = squel.update().table(this.table);
-    Object.keys(conditions).forEach((k) => sql.where(`${k} = ?`, conditions[k]));
+    Object.keys(conditions).forEach(k => sql.where(`${k} = ?`, conditions[k]));
     if (!raw) {
       return sql.setFields(objects);
     }
-    Object.keys(objects).forEach((k) => {
+    Object.keys(objects).forEach(k => {
       if (k.indexOf("$") === 0) {
         sql.set(objects[k]);
       } else {
@@ -294,7 +308,9 @@ export default abstract class EBase<T> {
    * 根据主键更新记录
    */
   public updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false): Promise<number> {
-    if (primary === undefined) { throw new Error("`primary` 不能为空"); }
+    if (primary === undefined) {
+      throw new Error("`primary` 不能为空");
+    }
     const condition: IKVObject = {};
     condition[this.primaryKey] = primary;
     return this.updateByField(condition, objects, raw).then((res: any) => res && res.affectedRows);
@@ -304,7 +320,7 @@ export default abstract class EBase<T> {
     removeUndefined(objects);
     const sql = squel.insert().into(this.table);
     sql.setFields(objects);
-    update.forEach((k) => {
+    update.forEach(k => {
       if (Array.isArray(objects[k])) {
         sql.onDupUpdate(objects[k][0], objects[k][1]);
       } else if (objects[k] !== undefined) {
@@ -322,10 +338,15 @@ export default abstract class EBase<T> {
   }
 
   public _incrFields(primary: IPrimary, fields: string[], num = 1) {
-    if (primary === undefined) { throw new Error("`primary` 不能为空"); }
+    if (primary === undefined) {
+      throw new Error("`primary` 不能为空");
+    }
 
-    const sql = squel.update().table(this.table).where(this.primaryKey + " = ?", primary);
-    fields.forEach((f) => sql.set(`${f} = ${f} + ${num}`));
+    const sql = squel
+      .update()
+      .table(this.table)
+      .where(this.primaryKey + " = ?", primary);
+    fields.forEach(f => sql.set(`${f} = ${f} + ${num}`));
     return sql;
   }
 
@@ -349,8 +370,12 @@ export default abstract class EBase<T> {
     asc = this.asc,
   ) {
     removeUndefined(conditions);
-    const sql = squel.select(SELETE_OPT).from(this.table).offset(offset).limit(limit);
-    fields.forEach((f) => sql.field(f));
+    const sql = squel
+      .select(SELETE_OPT)
+      .from(this.table)
+      .offset(offset)
+      .limit(limit);
+    fields.forEach(f => sql.field(f));
     parseWhere(sql, conditions);
     if (order) {
       sql.order(order, asc);
@@ -360,7 +385,10 @@ export default abstract class EBase<T> {
 
   public listRaw(connect: any, conditions = {}, fields = this.fields, ...args: any[]): Promise<T[]> {
     if (args.length === 2 && typeof args[1] === "object") {
-      return this.query(this._list(conditions, fields, args[0].limit, args[0].offset, args[0].order, args[0].asc), connect);
+      return this.query(
+        this._list(conditions, fields, args[0].limit, args[0].offset, args[0].order, args[0].asc),
+        connect,
+      );
     }
     return this.query(this._list(conditions, fields, ...args), connect);
   }
@@ -393,11 +421,17 @@ export default abstract class EBase<T> {
     order = this.order,
     asc = true,
   ) {
-    if (!keyword || search.length < 1) { throw new Error("`keyword` | `search` 不能为空"); }
-    const sql = squel.select(SELETE_OPT).from(this.table).offset(offset).limit(limit);
-    fields.forEach((f) => sql.field(f));
+    if (!keyword || search.length < 1) {
+      throw new Error("`keyword` | `search` 不能为空");
+    }
+    const sql = squel
+      .select(SELETE_OPT)
+      .from(this.table)
+      .offset(offset)
+      .limit(limit);
+    fields.forEach(f => sql.field(f));
     const exp = squel.expr();
-    search.forEach((k) => {
+    search.forEach(k => {
       exp.or(`${k} like ?`, "%" + keyword + "%");
     });
     sql.where(exp);
@@ -414,7 +448,15 @@ export default abstract class EBase<T> {
   /**
    * 根据关键词进行搜索
    */
-  public search(keyword: string, search: string[], fields?: string[], limit?: number, offset?: number, order?: string, asc?: boolean): Promise<T[]>;
+  public search(
+    keyword: string,
+    search: string[],
+    fields?: string[],
+    limit?: number,
+    offset?: number,
+    order?: string,
+    asc?: boolean,
+  ): Promise<T[]>;
   public search(keyword: string, search: string[], fields = this.fields, ...args: any[]): Promise<T[]> {
     if (args.length === 1 && typeof args[0] === "object") {
       return this.query(
@@ -427,7 +469,14 @@ export default abstract class EBase<T> {
   /**
    * 根据条件获取分页内容（比列表多出总数计算）
    */
-  public page(conditions: IConditions, fields?: string[], limit?: number, offset?: number, order?: string, asc?: boolean): Promise<IPageResult<T>>;
+  public page(
+    conditions: IConditions,
+    fields?: string[],
+    limit?: number,
+    offset?: number,
+    order?: string,
+    asc?: boolean,
+  ): Promise<IPageResult<T>>;
   /**
    * 根据条件获取分页内容（比列表多出总数计算）
    */
@@ -443,7 +492,9 @@ export default abstract class EBase<T> {
    */
   public transactions(name: string, func: (conn: any) => any) {
     return async () => {
-      if (!name) { throw new Error("`name` 不能为空"); }
+      if (!name) {
+        throw new Error("`name` 不能为空");
+      }
       // utils.randomString(6);
       const tid = "";
       const debug = this.debugInfo(`Transactions[${tid}] - ${name}`);
@@ -484,7 +535,7 @@ export default abstract class EBase<T> {
       await connection.beginTransactionAsync();
       try {
         for (const sql of sqls) {
-          this.log(`Transaction SQL: ${ sql }`);
+          this.log(`Transaction SQL: ${sql}`);
           await connection.queryAsync(sql);
         }
         const res = await connection.commitAsync();

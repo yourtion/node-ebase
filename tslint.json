@@ -6,6 +6,7 @@
     "max-line-length": false,
     "object-literal-sort-keys": false,
     "member-access": false,
-    "member-ordering": false
+    "member-ordering": false,
+    "arrow-parens": false
   }
 }
