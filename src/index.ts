@@ -30,6 +30,16 @@ export interface IPageResult<T> {
   list: T[];
 }
 
+export interface IConnection {
+  getConnectionAsync: () => Promise<IConnection>;
+  release(options?: any): Promise<void>;
+  beginTransactionAsync(options?: any): Promise<void>;
+  queryAsync: (options: string, values?: any) => Promise<any>;
+  debug?: (sql: any) => any;
+  commitAsync(options?: any): Promise<void>;
+  rollbackAsync(options?: any): Promise<void>;
+}
+
 /**
  * 删除对象中的 undefined
  */
@@ -91,12 +101,12 @@ export default abstract class EBase<T> {
   public primaryKey: string;
   public fields: string[];
   public parseWhere = parseWhere;
-  protected connect: any;
+  protected connect: IConnection;
   private order?: string;
   private asc: boolean;
   private log: (info: any) => void;
 
-  constructor(table: string, connect: any, options: IBaseOptions = {}) {
+  constructor(table: string, connect: IConnection, options: IBaseOptions = {}) {
     const tablePrefix = options.prefix !== undefined ? options.prefix : "";
     this.table = tablePrefix + table;
     this.primaryKey = options.primaryKey || "id";
@@ -115,8 +125,16 @@ export default abstract class EBase<T> {
   /**
    * 查询方法（内部查询尽可能调用这个，会打印Log）
    */
-  abstract query(sql: QueryBuilder | string, connection?: any): any;
-
+  public query(sql: QueryBuilder | string, connection: IConnection = this.connect) {
+    const logger = connection.debug ? connection.debug : this.log;
+    if (typeof sql === "string") {
+      logger(sql);
+      return connection.queryAsync(sql).catch(this.errorHandler);
+    }
+    const { text, values } = sql.toParam();
+    logger(sql.toString());
+    return connection.queryAsync(text, values).catch(this.errorHandler);
+  }
   /**
    * 错误处理方法
    */
@@ -131,7 +149,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public countRaw(connect: any, conditions: IConditions = {}): Promise<number> {
+  public countRaw(connect: IConnection, conditions: IConditions = {}): Promise<number> {
     return this.query(this._count(conditions), connect).then((res: any) => res && res[0] && res[0].c);
   }
 
@@ -155,7 +173,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public getByPrimaryRaw(connect: any, primary: string, fields = this.fields): Promise<T> {
+  public getByPrimaryRaw(connect: IConnection, primary: string, fields = this.fields): Promise<T> {
     return this.query(this._getByPrimary(primary, fields), connect).then((res: T[]) => res && res[0]);
   }
 
@@ -176,7 +194,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public getOneByFieldRaw(connect: any, object: IKVObject = {}, fields = this.fields): Promise<T> {
+  public getOneByFieldRaw(connect: IConnection, object: IKVObject = {}, fields = this.fields): Promise<T> {
     return this.query(this._getOneByField(object, fields), connect).then((res: T[]) => res && res[0]);
   }
 
@@ -198,7 +216,7 @@ export default abstract class EBase<T> {
       .limit(limit);
   }
 
-  public deleteByPrimaryRaw(connect: any, primary: IPrimary, limit = 1): Promise<number> {
+  public deleteByPrimaryRaw(connect: IConnection, primary: IPrimary, limit = 1): Promise<number> {
     return this.query(this._deleteByPrimary(primary, limit), connect).then((res: any) => res && res.affectedRows);
   }
 
@@ -220,7 +238,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public deleteByFieldRaw(connect: any, conditions: IConditions, limit = 1): Promise<number> {
+  public deleteByFieldRaw(connect: IConnection, conditions: IConditions, limit = 1): Promise<number> {
     return this.query(this._deleteByField(conditions, limit), connect).then((res: any) => res && res.affectedRows);
   }
 
@@ -246,7 +264,7 @@ export default abstract class EBase<T> {
       .setFields(object);
   }
 
-  public insertRaw(connect: any, object: IKVObject = {}) {
+  public insertRaw(connect: IConnection, object: IKVObject = {}) {
     return this.query(this._insert(object), connect);
   }
 
@@ -293,7 +311,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public updateByFieldRaw(connect: any, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+  public updateByFieldRaw(connect: IConnection, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
     return this.query(this._updateByField(conditions, objects), connect).then((res: any) => res && res.affectedRows);
   }
 
@@ -350,7 +368,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public incrFieldsRaw(connect: any, primary: IPrimary, fields: string[], num = 1): Promise<number> {
+  public incrFieldsRaw(connect: IConnection, primary: IPrimary, fields: string[], num = 1): Promise<number> {
     return this.query(this._incrFields(primary, fields, num), connect).then((res: any) => res && res.affectedRows);
   }
 
@@ -383,7 +401,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public listRaw(connect: any, conditions = {}, fields = this.fields, ...args: any[]): Promise<T[]> {
+  public listRaw(connect: IConnection, conditions = {}, fields = this.fields, ...args: any[]): Promise<T[]> {
     if (args.length === 2 && typeof args[1] === "object") {
       return this.query(
         this._list(conditions, fields, args[0].limit, args[0].offset, args[0].order, args[0].asc),
@@ -499,10 +517,7 @@ export default abstract class EBase<T> {
       const tid = "";
       const debug = this.debugInfo(`Transactions[${tid}] - ${name}`);
       const connection = await this.connect.getConnectionAsync();
-      connection.debugQuery = (sql: any) => {
-        debug(sql);
-        return connection.queryAsync(sql);
-      };
+      connection.debug = debug;
       await connection.beginTransactionAsync(); // 开始事务
       debug("Transaction Begin");
       try {

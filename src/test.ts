@@ -1,7 +1,7 @@
 /* tslint:disable:no-conditional-assignment arrow-parens no-console */
 
 import { QueryBuilder } from "squel";
-import EBase, { IKVObject } from "./index";
+import EBase, { IConditions, IConnection, IKVObject } from "./index";
 
 function getAllMethodNames(obj: any) {
   const methods: Set<string> = new Set();
@@ -30,11 +30,10 @@ const PARAMS_1: IKVObject<any> = {
 class Base<T> extends EBase<T> {
   errorHandler(err: any) { throw err; }
   debugInfo(name: string)  { return (sql: any) => sql; }
-  query(sql: string | QueryBuilder, connection: any) { return connection.queryAsync(sql); }
 }
 
 describe("Snapshot", () => {
-  const base = new Base<string>("test", {}) as IKVObject;
+  const base = new Base<string>("test", {} as IConnection) as IKVObject;
   const methods = getAllMethodNames(base).filter(k => {
     return k.indexOf("_") === 0 && k.indexOf("__") === -1;
   });
