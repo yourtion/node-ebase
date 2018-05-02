@@ -272,7 +272,7 @@ export default abstract class EBase<T> {
     return this.query(this._batchInsert(array));
   }
 
-  public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
+  public _updateByField(conditions: IConditions, objects: IKVObject, raw: boolean) {
     if (!conditions || Object.keys(conditions).length < 1) {
       throw new Error("`key` 不能为空");
     }
@@ -294,14 +294,14 @@ export default abstract class EBase<T> {
   }
 
   public updateByFieldRaw(connect: any, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
-    return this.query(this._updateByField(conditions, objects), connect).then((res: any) => res && res.affectedRows);
+    return this.query(this._updateByField(conditions, objects, raw), connect).then((res: any) => res && res.affectedRows);
   }
 
   /**
    * 根据查询条件更新记录
    */
   public updateByField(conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
-    return this.updateByFieldRaw(this.connect, conditions, objects).then((res: any) => res && res.affectedRows);
+    return this.updateByFieldRaw(this.connect, conditions, objects, raw).then((res: any) => res && res.affectedRows);
   }
 
   /**
