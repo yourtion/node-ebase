@@ -15,7 +15,7 @@ const SELETE_OPT = { autoQuoteTableNames: true, autoQuoteFieldNames: true };
 export interface IKVObject<T = any> {
   [key: string]: T;
 }
-export type IConditions = IKVObject<string | string[]>;
+export type IConditions = IKVObject<string | number | string[]>;
 export type IPrimary = string | number;
 
 export interface IPageParams {
@@ -31,19 +31,19 @@ export interface IPageResult<T> {
 }
 
 export interface IConnection {
-  getConnectionAsync: () => Promise<IConnection>;
-  release(options?: any): Promise<void>;
-  beginTransactionAsync(options?: any): Promise<void>;
   queryAsync: (options: string, values?: any) => Promise<any>;
   debug?: (sql: any) => any;
-  commitAsync(options?: any): Promise<void>;
-  rollbackAsync(options?: any): Promise<void>;
+  getConnectionAsync?: () => Promise<IConnection>;
+  release?(): void;
+  beginTransactionAsync?(options?: any): Promise<void>;
+  commitAsync?(options?: any): Promise<void>;
+  rollbackAsync?(options?: any): Promise<void>;
 }
 
 /**
  * 删除对象中的 undefined
  */
-function removeUndefined(object: IKVObject) {
+export function removeUndefined(object: IKVObject) {
   Object.keys(object).forEach(key => object[key] === undefined && delete object[key]);
   if (Object.keys.length === 0) {
     throw Error("Object is empty");
@@ -58,7 +58,7 @@ function removeUndefined(object: IKVObject) {
  * - 以 # 开头解析为 like %*%
  * - 数组类型使用 in 方式
  */
-function parseWhere(sql: Select, conditions: IConditions) {
+export function parseWhere(sql: Select, conditions: IConditions) {
   Object.keys(conditions).forEach(k => {
     const condition = conditions[k];
     if (k.indexOf("$") === 0) {
@@ -100,7 +100,6 @@ export default abstract class EBase<T> {
   public table: string;
   public primaryKey: string;
   public fields: string[];
-  public parseWhere = parseWhere;
   protected connect: IConnection;
   private order?: string;
   private asc: boolean;
@@ -160,21 +159,11 @@ export default abstract class EBase<T> {
     return this.countRaw(this.connect, conditions);
   }
 
-  public _getByPrimary(primary: IPrimary, fields: string[]) {
+  public getByPrimaryRaw(connect: IConnection, primary: string, fields = this.fields): Promise<T> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    const sql = squel
-      .select(SELETE_OPT)
-      .from(this.table)
-      .where(this.primaryKey + " = ?", primary)
-      .limit(1);
-    fields.forEach(f => sql.field(f));
-    return sql;
-  }
-
-  public getByPrimaryRaw(connect: IConnection, primary: string, fields = this.fields): Promise<T> {
-    return this.query(this._getByPrimary(primary, fields), connect).then((res: T[]) => res && res[0]);
+    return this.query(this._list({ [this.primaryKey]: primary }, fields, 1), connect).then((res: T[]) => res && res[0]);
   }
 
   /**
@@ -184,18 +173,8 @@ export default abstract class EBase<T> {
     return this.getByPrimaryRaw(this.connect, primary, fields);
   }
 
-  public _getOneByField(object: IKVObject = {}, fields = this.fields) {
-    const sql = squel
-      .select(SELETE_OPT)
-      .from(this.table)
-      .limit(1);
-    fields.forEach(f => sql.field(f));
-    parseWhere(sql, object);
-    return sql;
-  }
-
   public getOneByFieldRaw(connect: IConnection, object: IKVObject = {}, fields = this.fields): Promise<T> {
-    return this.query(this._getOneByField(object, fields), connect).then((res: T[]) => res && res[0]);
+    return this.query(this._list(object, fields, 1), connect).then((res: T[]) => res && res[0]);
   }
 
   /**
@@ -205,26 +184,18 @@ export default abstract class EBase<T> {
     return this.getOneByFieldRaw(this.connect, object, fields);
   }
 
-  public _deleteByPrimary(primary: IPrimary, limit = 1) {
+  public deleteByPrimaryRaw(connect: IConnection, primary: IPrimary): Promise<number> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    return squel
-      .delete()
-      .from(this.table)
-      .where(this.primaryKey + " = ?", primary)
-      .limit(limit);
-  }
-
-  public deleteByPrimaryRaw(connect: IConnection, primary: IPrimary, limit = 1): Promise<number> {
-    return this.query(this._deleteByPrimary(primary, limit), connect).then((res: any) => res && res.affectedRows);
+    return this.query(this._deleteByField({ [this.primaryKey]: primary }, 1), connect).then((res: any) => res && res.affectedRows);
   }
 
   /**
    * 根据主键删除数据
    */
-  public deleteByPrimary(primary: IPrimary, limit = 1) {
-    return this.deleteByPrimaryRaw(this.connect, primary, limit);
+  public deleteByPrimary(primary: IPrimary) {
+    return this.deleteByPrimaryRaw(this.connect, primary);
   }
 
   public _deleteByField(conditions: IConditions, limit = 1) {
@@ -276,7 +247,7 @@ export default abstract class EBase<T> {
   }
 
   public _batchInsert(array: IKVObject[]) {
-    array.forEach(o => removeUndefined(o));
+    array.forEach(removeUndefined);
     return squel
       .insert()
       .into(this.table)
@@ -311,7 +282,12 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public updateByFieldRaw(connect: IConnection, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+  public updateByFieldRaw(
+    connect: IConnection,
+    conditions: IConditions,
+    objects: IKVObject,
+    raw = false,
+  ): Promise<number> {
     return this.query(this._updateByField(conditions, objects), connect).then((res: any) => res && res.affectedRows);
   }
 
@@ -329,9 +305,7 @@ export default abstract class EBase<T> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    const condition: IKVObject = {};
-    condition[this.primaryKey] = primary;
-    return this.updateByField(condition, objects, raw).then((res: any) => res && res.affectedRows);
+    return this.updateByField({ [this.primaryKey]: primary }, objects, raw).then((res: any) => res && res.affectedRows);
   }
 
   public _createOrUpdate(objects: IKVObject, update = Object.keys(objects)) {
@@ -359,7 +333,6 @@ export default abstract class EBase<T> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-
     const sql = squel
       .update()
       .table(this.table)
@@ -414,12 +387,12 @@ export default abstract class EBase<T> {
   /**
    * 根据条件获取列表
    */
-  public list(conditions: IConditions, fields?: string[], pages?: IPageParams): Promise<T[]>;
+  public list(conditions?: IConditions, fields?: string[], pages?: IPageParams): Promise<T[]>;
   /**
    * 根据条件获取列表
    */
   public list(
-    conditions: IConditions,
+    conditions?: IConditions,
     fields?: string[],
     limit?: number,
     offset?: number,
@@ -516,23 +489,23 @@ export default abstract class EBase<T> {
       // utils.randomString(6);
       const tid = "";
       const debug = this.debugInfo(`Transactions[${tid}] - ${name}`);
-      const connection = await this.connect.getConnectionAsync();
+      const connection = await this.connect.getConnectionAsync!();
       connection.debug = debug;
-      await connection.beginTransactionAsync(); // 开始事务
+      await connection.beginTransactionAsync!(); // 开始事务
       debug("Transaction Begin");
       try {
         const result = await func(connection);
-        await connection.commitAsync(); // 提交事务
+        await connection.commitAsync!(); // 提交事务
         debug(`result: ${result}`);
         debug("Transaction Done");
         return result;
       } catch (err) {
         // 回滚错误
-        await connection.rollbackAsync();
+        await connection.rollbackAsync!();
         debug(`Transaction Rollback ${err.code}`);
         this.errorHandler(err);
       } finally {
-        connection.release();
+        connection.release!();
       }
     };
   }
@@ -546,22 +519,22 @@ export default abstract class EBase<T> {
         throw new Error("`sqls` 不能为空");
       }
       this.log("Begin Transaction");
-      const connection = await this.connect.getConnectionAsync();
-      await connection.beginTransactionAsync();
+      const connection = await this.connect.getConnectionAsync!();
+      await connection.beginTransactionAsync!();
       try {
         for (const sql of sqls) {
           this.log(`Transaction SQL: ${sql}`);
           await connection.queryAsync(sql);
         }
-        const res = await connection.commitAsync();
+        const res = await connection.commitAsync!();
         this.log("Done Transaction");
         return res;
       } catch (err) {
-        await connection.rollbackAsync();
+        await connection.rollbackAsync!();
         this.log("Rollback Transaction");
         this.errorHandler(err);
       } finally {
-        await connection.release();
+        await connection.release!();
       }
     };
   }
