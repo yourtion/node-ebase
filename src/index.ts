@@ -65,7 +65,7 @@ export function parseWhere(sql: Select, conditions: IConditions) {
       // 以 $ 开头直接解析
       if (Array.isArray(condition)) {
         sql.where(condition[0], ...condition.slice(1));
-      } else {
+      } else if(typeof condition === "string") {
         sql.where(condition);
       }
     } else if (k.indexOf("#") !== -1) {
@@ -159,11 +159,15 @@ export default abstract class EBase<T> {
     return this.countRaw(this.connect, conditions);
   }
 
-  public getByPrimaryRaw(connect: IConnection, primary: string, fields = this.fields): Promise<T> {
+  public _getByPrimary(primary: string, fields = this.fields) {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    return this.query(this._list({ [this.primaryKey]: primary }, fields, 1), connect).then((res: T[]) => res && res[0]);
+    return this._list({ [this.primaryKey]: primary }, fields, 1);
+  }
+
+  public getByPrimaryRaw(connect: IConnection, primary: string, fields = this.fields): Promise<T> {
+    return this.query(this._getByPrimary(primary, fields), connect).then((res: T[]) => res && res[0]);
   }
 
   /**
@@ -184,11 +188,15 @@ export default abstract class EBase<T> {
     return this.getOneByFieldRaw(this.connect, object, fields);
   }
 
-  public deleteByPrimaryRaw(connect: IConnection, primary: IPrimary): Promise<number> {
+  public _deleteByPrimary(primary: IPrimary){
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
-    return this.query(this._deleteByField({ [this.primaryKey]: primary }, 1), connect).then((res: any) => res && res.affectedRows);
+    return this._deleteByField({ [this.primaryKey]: primary }, 1);
+  }
+
+  public deleteByPrimaryRaw(connect: IConnection, primary: IPrimary): Promise<number> {
+    return this.query(this._deleteByPrimary(primary)).then((res: any) => res && res.affectedRows);
   }
 
   /**
@@ -288,14 +296,14 @@ export default abstract class EBase<T> {
     objects: IKVObject,
     raw = false,
   ): Promise<number> {
-    return this.query(this._updateByField(conditions, objects), connect).then((res: any) => res && res.affectedRows);
+    return this.query(this._updateByField(conditions, objects, raw), connect).then((res: any) => res && res.affectedRows);
   }
 
   /**
    * 根据查询条件更新记录
    */
   public updateByField(conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
-    return this.updateByFieldRaw(this.connect, conditions, objects).then((res: any) => res && res.affectedRows);
+    return this.updateByFieldRaw(this.connect, conditions, objects, raw).then((res: any) => res && res.affectedRows);
   }
 
   /**

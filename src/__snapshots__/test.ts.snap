@@ -8,6 +8,10 @@ exports[`Snapshot _createOrUpdate 1`] = `"INSERT INTO test (c) VALUES ('1') ON D
 
 exports[`Snapshot _deleteByField 1`] = `"DELETE FROM test WHERE (a = 'b' ) LIMIT 1"`;
 
+exports[`Snapshot _deleteByPrimary 1`] = `"DELETE FROM test WHERE (id = '2' ) LIMIT 1"`;
+
+exports[`Snapshot _getByPrimary 1`] = `"SELECT \`a\`, \`c\` FROM \`test\` WHERE (id = '1') LIMIT 1 OFFSET 0"`;
+
 exports[`Snapshot _incrFields 1`] = `"UPDATE test SET a = a + 2 WHERE (id = 1)"`;
 
 exports[`Snapshot _insert 1`] = `"INSERT INTO test (a) VALUES ('b')"`;
