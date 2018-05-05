@@ -269,7 +269,7 @@ export default abstract class EBase<T> {
     return this.query(this._batchInsert(array));
   }
 
-  public _updateByField(conditions: IConditions, objects: IKVObject, raw = false) {
+  public _updateByField(conditions: IConditions, objects: IKVObject, raw: boolean) {
     if (!conditions || Object.keys(conditions).length < 1) {
       throw new Error("`key` 不能为空");
     }
@@ -290,12 +290,7 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public updateByFieldRaw(
-    connect: IConnection,
-    conditions: IConditions,
-    objects: IKVObject,
-    raw = false,
-  ): Promise<number> {
+  public updateByFieldRaw(connect: any, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
     return this.query(this._updateByField(conditions, objects, raw), connect).then((res: any) => res && res.affectedRows);
   }
 
