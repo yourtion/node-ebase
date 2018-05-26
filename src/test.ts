@@ -14,9 +14,9 @@ function getAllMethodNames(obj: any) {
 
 const PARAMS_1: IKVObject<any> = {
   _count: [],
-  _deleteByField: [{ a: "b" }],
   _getByPrimary: ["1", ["a", "c"]],
   _deleteByPrimary: ["2"],
+  _deleteByField: [{ a: "b" }],
   _insert: [{ a: "b" }],
   _batchInsert: [[{ a: "b", a2: "b2" }]],
   _createOrUpdate: [{ c: "1" }],
