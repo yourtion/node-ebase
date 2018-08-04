@@ -12,10 +12,7 @@ export { Delete, Insert, MysqlInsert, Select, Update };
 
 const SELETE_OPT = { autoQuoteTableNames: true, autoQuoteFieldNames: true };
 
-export interface IKVObject<T = any> {
-  [key: string]: T;
-}
-export type IConditions = IKVObject<string | number | string[]>;
+export type IConditions = Record<string, string | number | string[]>;
 export type IPrimary = string | number;
 
 export interface IPageParams {
@@ -43,7 +40,7 @@ export interface IConnection {
 /**
  * 删除对象中的 undefined
  */
-export function removeUndefined(object: IKVObject) {
+export function removeUndefined(object: Record<string, any>) {
   Object.keys(object).forEach(key => object[key] === undefined && delete object[key]);
   if (Object.keys.length === 0) {
     throw Error("Object is empty");
@@ -177,14 +174,14 @@ export default abstract class EBase<T> {
     return this.getByPrimaryRaw(this.connect, primary, fields);
   }
 
-  public getOneByFieldRaw(connect: IConnection, object: IKVObject = {}, fields = this.fields): Promise<T> {
+  public getOneByFieldRaw(connect: IConnection, object: Record<string, any> = {}, fields = this.fields): Promise<T> {
     return this.query(this._list(object, fields, 1), connect).then((res: T[]) => res && res[0]);
   }
 
   /**
    * 根据查询条件获取一条记录
    */
-  public getOneByField(object: IKVObject = {}, fields = this.fields) {
+  public getOneByField(object: Record<string, any> = {}, fields = this.fields) {
     return this.getOneByFieldRaw(this.connect, object, fields);
   }
 
@@ -235,7 +232,7 @@ export default abstract class EBase<T> {
     return this.list(conditions, fields, 999);
   }
 
-  public _insert(object: IKVObject = {}) {
+  public _insert(object: Record<string, any> = {}) {
     removeUndefined(object);
     return squel
       .insert()
@@ -243,18 +240,18 @@ export default abstract class EBase<T> {
       .setFields(object);
   }
 
-  public insertRaw(connect: IConnection, object: IKVObject = {}) {
+  public insertRaw(connect: IConnection, object: Record<string, any> = {}) {
     return this.query(this._insert(object), connect);
   }
 
   /**
    * 插入一条数据
    */
-  public insert(object: IKVObject = {}) {
+  public insert(object: Record<string, any> = {}) {
     return this.insertRaw(this.connect, object);
   }
 
-  public _batchInsert(array: IKVObject[]) {
+  public _batchInsert(array: Record<string, any>[]) {
     array.forEach(removeUndefined);
     return squel
       .insert()
@@ -265,11 +262,11 @@ export default abstract class EBase<T> {
   /**
    * 批量插入数据
    */
-  public batchInsert(array: IKVObject[]) {
+  public batchInsert(array: Record<string, any>[]) {
     return this.query(this._batchInsert(array));
   }
 
-  public _updateByField(conditions: IConditions, objects: IKVObject, raw: boolean) {
+  public _updateByField(conditions: IConditions, objects: Record<string, any>, raw: boolean) {
     if (!conditions || Object.keys(conditions).length < 1) {
       throw new Error("`key` 不能为空");
     }
@@ -290,28 +287,28 @@ export default abstract class EBase<T> {
     return sql;
   }
 
-  public updateByFieldRaw(connect: any, conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+  public updateByFieldRaw(connect: any, conditions: IConditions, objects: Record<string, any>, raw = false): Promise<number> {
     return this.query(this._updateByField(conditions, objects, raw), connect).then((res: any) => res && res.affectedRows);
   }
 
   /**
    * 根据查询条件更新记录
    */
-  public updateByField(conditions: IConditions, objects: IKVObject, raw = false): Promise<number> {
+  public updateByField(conditions: IConditions, objects: Record<string, any>, raw = false): Promise<number> {
     return this.updateByFieldRaw(this.connect, conditions, objects, raw).then((res: any) => res && res.affectedRows);
   }
 
   /**
    * 根据主键更新记录
    */
-  public updateByPrimary(primary: IPrimary, objects: IKVObject, raw = false): Promise<number> {
+  public updateByPrimary(primary: IPrimary, objects: Record<string, any>, raw = false): Promise<number> {
     if (primary === undefined) {
       throw new Error("`primary` 不能为空");
     }
     return this.updateByField({ [this.primaryKey]: primary }, objects, raw).then((res: any) => res && res.affectedRows);
   }
 
-  public _createOrUpdate(objects: IKVObject, update = Object.keys(objects)) {
+  public _createOrUpdate(objects: Record<string, any>, update = Object.keys(objects)) {
     removeUndefined(objects);
     const sql = squel.insert().into(this.table);
     sql.setFields(objects);
@@ -328,7 +325,7 @@ export default abstract class EBase<T> {
   /**
    * 创建一条记录，如果存在就更新
    */
-  public createOrUpdate(objects: IKVObject, update = Object.keys(objects)) {
+  public createOrUpdate(objects: Record<string, any>, update = Object.keys(objects)) {
     return this.query(this._createOrUpdate(objects, update));
   }
 
