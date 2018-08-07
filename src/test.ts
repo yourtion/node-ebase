@@ -1,7 +1,8 @@
 /* tslint:disable:no-conditional-assignment arrow-parens no-console */
 
 import { QueryBuilder } from "squel";
-import EBase, { IConditions, IConnection, IKVObject } from "./index";
+import EBase, { IConditions, IConnection } from "./index";
+import mysql from "./mysql";
 
 function getAllMethodNames(obj: any) {
   const methods: Set<string> = new Set();
@@ -12,7 +13,7 @@ function getAllMethodNames(obj: any) {
   return Array.from(methods);
 }
 
-const PARAMS_1: IKVObject<any> = {
+const PARAMS_1: Record<string, any> = {
   _count: [],
   _getByPrimary: ["1", ["a", "c"]],
   _deleteByPrimary: ["2"],
@@ -27,12 +28,16 @@ const PARAMS_1: IKVObject<any> = {
 };
 
 class Base<T> extends EBase<T> {
-  errorHandler(err: any) { throw err; }
-  debugInfo(name: string)  { return (sql: any) => sql; }
+  errorHandler(err: any) {
+    throw err;
+  }
+  debugInfo(name: string) {
+    return (sql: any) => sql;
+  }
 }
 
 describe("Snapshot", () => {
-  const base = new Base<string>("test", {} as IConnection) as IKVObject;
+  const base = new Base<string>("test", mysql) as Record<string, any>;
   const methods = getAllMethodNames(base).filter(k => {
     return k.indexOf("_") === 0 && k.indexOf("__") === -1;
   });
