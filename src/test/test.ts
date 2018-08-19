@@ -1,7 +1,7 @@
 /* tslint:disable:no-conditional-assignment arrow-parens no-console */
 
 import { QueryBuilder } from "squel";
-import EBase, { IConditions, IConnection } from "./index";
+import EBase, { IConditions, IConnection } from "../lib";
 import mysql from "./mysql";
 
 function getAllMethodNames(obj: any) {

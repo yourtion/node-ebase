@@ -42,7 +42,7 @@
     "transform": {
       "^.+\\.tsx?$": "ts-jest"
     },
-    "testRegex": "./src/test",
+    "testRegex": "./src/test/test",
     "collectCoverageFrom": [
       "src/index.ts"
     ],
